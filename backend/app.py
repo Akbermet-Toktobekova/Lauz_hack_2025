@@ -10,14 +10,49 @@ import sys
 # Add parent directory to path to import ai_service_level
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Try to import flask-cors, fallback to manual CORS headers if not available
+try:
+    from flask_cors import CORS
+    CORS_AVAILABLE = True
+except ImportError:
+    CORS_AVAILABLE = False
+    print("Warning: flask-cors not installed. Install it with: pip install flask-cors")
+    print("Using manual CORS headers as fallback.")
+
 from ai_service_level.fraud_agent import FraudAgent
 
 app = Flask(__name__)
 
+# Enable CORS for all routes to allow frontend connections
+# This allows requests from localhost:3000 (frontend) to localhost:5000 (backend)
+if CORS_AVAILABLE:
+    CORS(app, resources={
+        r"/api/*": {"origins": ["http://localhost:3000", "http://127.0.0.1:3000"]},
+        r"/health": {"origins": ["http://localhost:3000", "http://127.0.0.1:3000"]}
+    })
+else:
+    # Manual CORS headers as fallback
+    @app.after_request
+    def after_request(response):
+        origin = request.headers.get('Origin')
+        if origin in ['http://localhost:3000', 'http://127.0.0.1:3000']:
+            response.headers.add('Access-Control-Allow-Origin', origin)
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+            response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        return response
+
 # Initialize Fraud Agent
 # Set LLAMA_SERVER_URL environment variable if llama-server is not on localhost:8080
 llama_url = os.getenv("LLAMA_SERVER_URL", "http://127.0.0.1:8080")
-data_dir = os.getenv("DATA_DIR", "data")
+
+# Resolve data directory path - default to project root's data directory
+# If DATA_DIR env var is set, use it; otherwise use absolute path to project root/data
+if os.getenv("DATA_DIR"):
+    data_dir = os.getenv("DATA_DIR")
+else:
+    # Get the project root directory (parent of backend directory)
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    data_dir = os.path.join(project_root, "data")
 
 fraud_agent = FraudAgent(data_dir=data_dir, llama_url=llama_url)
 
