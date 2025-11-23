@@ -7,6 +7,7 @@ from typing import Dict, List, Optional
 from datetime import datetime
 import pandas as pd
 import os
+import math
 
 
 class UnifiedCustomerProfile:
@@ -34,16 +35,36 @@ class UnifiedCustomerProfile:
     
     def to_dict(self) -> Dict:
         """Convert UCP to dictionary for storage/API."""
+        import math
+        
+        # Helper to clean NaN values
+        def clean_value(v):
+            if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                return None
+            if isinstance(v, dict):
+                return {k: clean_value(v) for k, v in v.items()}
+            if isinstance(v, list):
+                return [clean_value(item) for item in v]
+            return v
+        
+        financial_clean = {k: clean_value(v) for k, v in self.transaction_aggregates.items()}
+        
+        # Clean account data
+        account_data = self.profile_data.get("account_data", {})
+        if isinstance(account_data, dict) and "accounts" in account_data:
+            account_data = {**account_data, "accounts": [clean_value(acc) for acc in account_data.get("accounts", [])]}
+        
         return {
             "canonical_id": self.partner_id,
             "created_at": self.created_at,
             "identity": self.profile_data.get("identity", {}),
             "static_profile": self.profile_data.get("static_profile", {}),
-            "account_data": self.profile_data.get("account_data", {}),
-            "financial_aggregates": self.transaction_aggregates,
+            "account_data": account_data,
+            "financial_aggregates": financial_clean,
             "risk_metadata": self.risk_metadata,
             "onboarding_notes": self.profile_data.get("onboarding_notes", ""),
-            "recent_transactions": self.profile_data.get("recent_transactions", [])
+            "recent_transactions": [clean_value(tx) for tx in self.profile_data.get("recent_transactions", [])],
+            "all_transactions": [clean_value(tx) for tx in self.profile_data.get("all_transactions", [])]
         }
     
     def to_text(self) -> str:
@@ -141,9 +162,13 @@ class UCPBuilder:
         financial_aggregates = self._calculate_financial_aggregates(partner_id)
         ucp.transaction_aggregates = financial_aggregates
         
-        # V. Recent Transactions
-        recent_tx = self._get_recent_transactions(partner_id, limit=5)
+        # V. Recent Transactions (get more for visualization)
+        recent_tx = self._get_recent_transactions(partner_id, limit=100)  # Increased for chart visualization
         ucp.profile_data["recent_transactions"] = recent_tx
+        
+        # Also include all transactions for comprehensive visualization
+        all_tx = self._get_all_transactions(partner_id)
+        ucp.profile_data["all_transactions"] = all_tx
         
         # VI. Onboarding Notes
         onboarding_note = self._get_onboarding_note(partner_id)
@@ -188,6 +213,18 @@ class UCPBuilder:
     
     def _extract_account_data(self, partner_id: str) -> Dict:
         """Extract account and device data."""
+        import math
+        
+        # Helper to clean NaN values
+        def clean_value(v):
+            if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                return None
+            if isinstance(v, dict):
+                return {k: clean_value(v) for k, v in v.items()}
+            if isinstance(v, list):
+                return [clean_value(item) for item in v]
+            return v
+        
         # Get business relationships
         partner_roles = self.partner_role_df[
             self.partner_role_df["partner_id"] == partner_id
@@ -206,9 +243,12 @@ class UCPBuilder:
         account_ids = accounts["account_id"].unique()
         account_details = self.account_df[self.account_df["account_id"].isin(account_ids)]
         
+        accounts_list = account_details.to_dict("records") if not account_details.empty else []
+        accounts_clean = [clean_value(acc) for acc in accounts_list]
+        
         return {
             "account_count": len(account_ids),
-            "accounts": account_details.to_dict("records") if not account_details.empty else [],
+            "accounts": accounts_clean,
             "account_status": "active" if len(account_ids) > 0 else "inactive"
         }
     
@@ -248,19 +288,41 @@ class UCPBuilder:
         debit_30d = df_30d[df_30d["Debit/Credit"] == "debit"]["Amount"].sum()
         debit_90d = df_90d[df_90d["Debit/Credit"] == "debit"]["Amount"].sum()
         
+        # Helper to safely convert to float, handling NaN
+        def safe_float(value, default=0):
+            if pd.isna(value) or value is None:
+                return default
+            try:
+                result = float(value)
+                return result if not (math.isnan(result) or math.isinf(result)) else default
+            except (ValueError, TypeError):
+                return default
+        
         return {
-            "total_spending_30d": float(debit_30d) if not pd.isna(debit_30d) else 0,
-            "total_spending_90d": float(debit_90d) if not pd.isna(debit_90d) else 0,
-            "avg_tx_value_90d": float(df_90d["Amount"].mean()) if len(df_90d) > 0 else 0,
-            "velocity_tx_per_hour": velocity,
+            "total_spending_30d": safe_float(debit_30d, 0),
+            "total_spending_90d": safe_float(debit_90d, 0),
+            "avg_tx_value_90d": safe_float(df_90d["Amount"].mean() if len(df_90d) > 0 else 0, 0),
+            "velocity_tx_per_hour": safe_float(velocity, 0),
             "tx_count_30d": len(df_30d),
             "tx_count_90d": len(df_90d),
-            "max_tx_amount": float(df["Amount"].max()) if len(df) > 0 else 0,
-            "min_tx_amount": float(df["Amount"].min()) if len(df) > 0 else 0
+            "max_tx_amount": safe_float(df["Amount"].max() if len(df) > 0 else 0, 0),
+            "min_tx_amount": safe_float(df["Amount"].min() if len(df) > 0 else 0, 0)
         }
     
     def _get_all_transactions(self, partner_id: str) -> List[Dict]:
         """Get all transactions for a partner."""
+        import math
+        
+        # Helper to clean NaN values
+        def clean_value(v):
+            if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                return None
+            if isinstance(v, dict):
+                return {k: clean_value(v) for k, v in v.items()}
+            if isinstance(v, list):
+                return [clean_value(item) for item in v]
+            return v
+        
         partner_roles = self.partner_role_df[
             self.partner_role_df["partner_id"] == partner_id
         ]
@@ -281,10 +343,23 @@ class UCPBuilder:
             self.transactions_df["Account ID"].isin(accounts)
         ]
         
-        return transactions.to_dict("records")
+        transactions_list = transactions.to_dict("records")
+        return [clean_value(tx) for tx in transactions_list]
     
     def _get_recent_transactions(self, partner_id: str, limit: int = 5) -> List[Dict]:
         """Get recent transactions."""
+        import math
+        
+        # Helper to clean NaN values
+        def clean_value(v):
+            if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                return None
+            if isinstance(v, dict):
+                return {k: clean_value(v) for k, v in v.items()}
+            if isinstance(v, list):
+                return [clean_value(item) for item in v]
+            return v
+        
         transactions = self._get_all_transactions(partner_id)
         
         if not transactions:
@@ -294,7 +369,8 @@ class UCPBuilder:
         df["Date"] = pd.to_datetime(df["Date"])
         df = df.sort_values("Date", ascending=False).head(limit)
         
-        return df.to_dict("records")
+        transactions_list = df.to_dict("records")
+        return [clean_value(tx) for tx in transactions_list]
     
     def _get_onboarding_note(self, partner_id: str) -> str:
         """Get onboarding notes."""

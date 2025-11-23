@@ -4,7 +4,7 @@ import { QueryHistory } from "@/components/QueryHistory";
 import { AnalysisPanel } from "@/components/AnalysisPanel";
 import { VisualizationPanel } from "@/components/VisualizationPanel";
 import { QueryMessage, FraudAnalysisResponse } from "@/types/fraud";
-import { analyzeFraudRisk, checkHealth } from "@/services/fraudApi";
+import { analyzeFraudRisk, checkHealth, askQuestion, sendChatMessage } from "@/services/fraudApi";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Shield, CheckCircle2, XCircle } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -15,6 +15,7 @@ const Index = () => {
   const [currentAnalysis, setCurrentAnalysis] = useState<FraudAnalysisResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [backendStatus, setBackendStatus] = useState<{ connected: boolean; error?: string } | null>(null);
+  const [currentPartnerId, setCurrentPartnerId] = useState<string | undefined>(undefined);
   const { toast } = useToast();
 
   // Check backend health on mount
@@ -33,40 +34,68 @@ const Index = () => {
     checkBackendHealth();
   }, []);
 
-  const handleQuery = async (partnerId: string) => {
+  const handleQuery = async (input: string, isQuestion: boolean) => {
+    setIsLoading(true);
+
     // Add user message
     const userMessage: QueryMessage = {
       id: Date.now().toString(),
       type: "user",
-      content: `Assess risk for Partner ID: ${partnerId}`,
+      content: input,
       timestamp: new Date(),
-      partnerId: partnerId,
+      partnerId: currentPartnerId,
+      isQuestion: isQuestion,
     };
     setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
 
     try {
-      const result = await analyzeFraudRisk(partnerId);
+      // Build conversation history for context
+      const conversationHistory = messages.map(msg => ({
+        content: msg.content,
+        partner_id: msg.partnerId
+      }));
+
+      // Send to chatbot API - it handles everything
+      const result = await sendChatMessage(input, conversationHistory);
+      
+      // Update current partner ID if one was extracted
+      if (result.partner_id) {
+        setCurrentPartnerId(result.partner_id);
+      }
       
       // Add assistant response
       const assistantMessage: QueryMessage = {
         id: (Date.now() + 1).toString(),
-        type: "assistant",
-        content: `Analysis complete for Partner ${result.partner_id.substring(0, 8)}... Risk score: ${result.risk_score}/100`,
+        type: result.action === "error" ? "error" : "assistant",
+        content: result.response,
         timestamp: new Date(),
-        data: result,
+        partnerId: result.partner_id || currentPartnerId,
+        isQuestion: result.action === "question",
+        data: result.data,
       };
       setMessages((prev) => [...prev, assistantMessage]);
-      setCurrentAnalysis(result);
 
-      toast({
-        title: "Analysis Complete",
-        description: `Risk assessment generated for partner ${result.partner_id.substring(0, 8)}...`,
-      });
+      // Update current analysis if risk assessment was performed
+      if (result.action === "risk_assessment" && result.data) {
+        setCurrentAnalysis(result.data);
+        toast({
+          title: "Analysis Complete",
+          description: `Risk assessment generated for partner ${result.partner_id?.substring(0, 8)}...`,
+        });
+      } else if (result.action === "question") {
+        toast({
+          title: "Question Answered",
+          description: "Answer generated based on customer profile",
+        });
+      } else if (result.action === "error") {
+        toast({
+          title: "Error",
+          description: result.response,
+          variant: "destructive",
+        });
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      
-      // Add error message
       const errorMsg: QueryMessage = {
         id: (Date.now() + 1).toString(),
         type: "error",
@@ -74,13 +103,11 @@ const Index = () => {
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMsg]);
-
       toast({
-        title: "Analysis Failed",
+        title: "Request Failed",
         description: errorMessage,
         variant: "destructive",
       });
-      console.error("Analysis error:", error);
     } finally {
       setIsLoading(false);
     }
@@ -135,11 +162,11 @@ const Index = () => {
               {isLoading && (
                 <div className="flex items-center gap-2 text-muted-foreground mt-4">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm">Analyzing fraud risk...</span>
+                  <span className="text-sm">Processing...</span>
                 </div>
               )}
             </ScrollArea>
-            <QueryInput onSubmit={handleQuery} isLoading={isLoading} />
+            <QueryInput onSubmit={handleQuery} isLoading={isLoading} currentPartnerId={currentPartnerId} />
           </div>
 
           {/* Right Section: Split Panel Results */}

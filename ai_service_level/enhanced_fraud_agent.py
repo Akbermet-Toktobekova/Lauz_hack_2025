@@ -128,15 +128,17 @@ KEY FINANCIAL FEATURES:
 RISK INDICATORS:
 {indicators_text}
 
-Provide a comprehensive risk assessment:
+Provide a comprehensive risk assessment in a clear, natural language format:
 1. Risk Score (0-100): 0 = no risk, 100 = highest risk
-2. Detailed Rationale: Explain the risk factors, patterns, and compliance concerns
+2. Detailed Rationale: Write a compelling, human-friendly explanation of the risk factors, patterns, and compliance concerns. Use natural language, avoid markdown formatting, and focus on what matters most. Be concise but informative.
 3. Feature Contributions: Identify which specific features (velocity, amounts, patterns) contributed most to the risk score
 4. Compliance Notes: Any FINMA/Swiss regulatory concerns
 
+IMPORTANT: Write the rationale in plain, natural language without markdown formatting (no **, no bullets, no headers). Make it compelling and easy to understand.
+
 Format your response as:
 RISK_SCORE: [number 0-100]
-RATIONALE: [detailed explanation]
+RATIONALE: [natural, compelling explanation in plain text]
 FEATURE_CONTRIBUTIONS: [list key features that influenced the score]
 COMPLIANCE_NOTES: [regulatory concerns if any]"""
     
