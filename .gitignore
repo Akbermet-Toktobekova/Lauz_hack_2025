@@ -1,0 +1,21 @@
+# Exclude model folder
+model/
+models/
+
+# Common Python ignores
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Common ignores
+.DS_Store
+*.log
+.cache/
+*.cache
+gpt-oss-20b/
