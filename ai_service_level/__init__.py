@@ -10,6 +10,7 @@ from .ucp import UnifiedCustomerProfile, UCPBuilder
 from .enhanced_fraud_agent import EnhancedFraudAgent
 from .rag_agent import RAGAgent
 from .ocr_processor import OCRProcessor
+from .chatbot_agent import ChatbotAgent
 
 __all__ = [
     "ProfileAgent", 
@@ -19,5 +20,6 @@ __all__ = [
     "UCPBuilder",
     "EnhancedFraudAgent",
     "RAGAgent",
-    "OCRProcessor"
+    "OCRProcessor",
+    "ChatbotAgent"
 ]

@@ -22,6 +22,7 @@ except ImportError:
 from ai_service_level.fraud_agent import FraudAgent
 from ai_service_level.enhanced_fraud_agent import EnhancedFraudAgent
 from ai_service_level.rag_agent import RAGAgent
+from ai_service_level.chatbot_agent import ChatbotAgent
 
 app = Flask(__name__)
 
@@ -55,6 +56,7 @@ data_dir = os.getenv("DATA_DIR", os.path.join(workspace_root, "data"))
 fraud_agent = FraudAgent(data_dir=data_dir, llama_url=llama_url)
 enhanced_fraud_agent = EnhancedFraudAgent(data_dir=data_dir, llama_url=llama_url)
 rag_agent = RAGAgent(data_dir=data_dir, llama_url=llama_url)
+chatbot_agent = ChatbotAgent(data_dir=data_dir, llama_url=llama_url)
 
 
 @app.route("/health", methods=["GET"])
@@ -261,13 +263,122 @@ def qa():
         # Answer question using RAG Agent
         result = rag_agent.answer_query(partner_id, question)
         
+        # Clean NaN values from response (safety check)
+        import math
+        import json
+        
+        def clean_nan(obj):
+            if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+                return None
+            if isinstance(obj, dict):
+                return {k: clean_nan(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [clean_nan(item) for item in obj]
+            return obj
+        
+        cleaned_result = clean_nan(result)
+        
+        # Verify JSON serializable
+        try:
+            json.dumps(cleaned_result)
+        except (TypeError, ValueError) as e:
+            # If still has issues, return minimal safe response
+            return jsonify({
+                "partner_id": partner_id,
+                "question": question,
+                "answer": result.get("answer", "Error processing response"),
+                "citations": [],
+                "ucp_snapshot": {},
+                "source": result.get("source", "Unified Customer Profile (UCP)"),
+                "status": "success",
+                "warning": "Some data was filtered due to serialization issues"
+            })
+        
         return jsonify({
+            "partner_id": cleaned_result["partner_id"],
+            "question": cleaned_result["question"],
+            "answer": cleaned_result["answer"],
+            "citations": cleaned_result["citations"],
+            "ucp_snapshot": cleaned_result["ucp_snapshot"],
+            "source": cleaned_result["source"],
+            "status": "success"
+        })
+    
+    except Exception as e:
+        return jsonify({
+            "error": "Internal server error",
+            "message": str(e)
+        }), 500
+
+
+@app.route("/api/chatbot", methods=["POST"])
+def chatbot():
+    """
+    Natural language chatbot endpoint.
+    Accepts any message, extracts Partner IDs, and routes to appropriate handlers.
+    
+    Request body:
+    {
+        "message": "Assess risk for partner 96a660ff-08e0-49c1-be6d-bb22a84e742e"
+        OR
+        "message": "What is the name of client 96a660ff-08e0-49c1-be6d-bb22a84e742e?"
+        OR
+        "message": "What is the total spending?" (if partner_id was mentioned before)
+    }
+    
+    Optional:
+    {
+        "message": "...",
+        "conversation_history": [
+            {"content": "...", "partner_id": "..."},
+            ...
+        ]
+    }
+    
+    Returns:
+    {
+        "response": "The chatbot's response",
+        "action": "risk_assessment" | "question" | "help" | "error",
+        "partner_id": "..." (if extracted/used),
+        "data": {...} (risk assessment or Q&A data if applicable),
+        "status": "success"
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        message = data.get("message")
+        if not message:
+            return jsonify({"error": "message is required"}), 400
+        
+        conversation_history = data.get("conversation_history", [])
+        
+        # Process message using Chatbot Agent
+        result = chatbot_agent.process_message(message, conversation_history)
+        
+        # Clean NaN values from data (safety check)
+        import math
+        import json
+        
+        def clean_nan(obj):
+            if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+                return None
+            if isinstance(obj, dict):
+                return {k: clean_nan(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [clean_nan(item) for item in obj]
+            return obj
+        
+        cleaned_data = clean_nan(result.get("data")) if result.get("data") else None
+        
+        return jsonify({
+            "response": result["response"],
+            "action": result["action"],
             "partner_id": result["partner_id"],
-            "question": result["question"],
-            "answer": result["answer"],
-            "citations": result["citations"],
-            "ucp_snapshot": result["ucp_snapshot"],
-            "source": result["source"],
+            "data": cleaned_data,
             "status": "success"
         })
     

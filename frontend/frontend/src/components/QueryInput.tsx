@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface QueryInputProps {
-  onSubmit: (partnerId: string) => void;
+  onSubmit: (input: string, isQuestion: boolean) => void;
   isLoading: boolean;
+  currentPartnerId?: string; // Track current partner in conversation
 }
 
 /**
@@ -18,29 +19,46 @@ const isValidUUID = (id: string): boolean => {
 };
 
 /**
- * Query input component for submitting partner ID for fraud analysis
+ * Detects if input is a Partner ID or a natural language question
  */
-export const QueryInput = ({ onSubmit, isLoading }: QueryInputProps) => {
-  const [partnerId, setPartnerId] = useState("");
+const isPartnerId = (input: string): boolean => {
+  const trimmed = input.trim();
+  // If it looks like a UUID, treat as Partner ID
+  if (isValidUUID(trimmed)) {
+    return true;
+  }
+  // If it's very short and contains only UUID-like characters, might be Partner ID
+  if (trimmed.length < 10 && /^[0-9a-f-]+$/i.test(trimmed)) {
+    return true;
+  }
+  // Otherwise, treat as a question
+  return false;
+};
+
+/**
+ * Query input component - supports both Partner IDs and natural language questions
+ */
+export const QueryInput = ({ onSubmit, isLoading, currentPartnerId }: QueryInputProps) => {
+  const [input, setInput] = useState("");
   const [showValidation, setShowValidation] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmedId = partnerId.trim();
+    const trimmed = input.trim();
     
-    if (!trimmedId || isLoading) return;
+    if (!trimmed || isLoading) return;
     
-    // Allow submission even if not perfect UUID (backend will validate)
-    // But show warning if format looks wrong
-    if (!isValidUUID(trimmedId)) {
+    const isId = isPartnerId(trimmed);
+    
+    // If it looks like a Partner ID but isn't valid UUID, show warning
+    if (isId && !isValidUUID(trimmed)) {
       setShowValidation(true);
-      // Still allow submission - backend will handle validation
     } else {
       setShowValidation(false);
     }
     
-    onSubmit(trimmedId);
-    setPartnerId("");
+    onSubmit(trimmed, !isId);
+    setInput("");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -50,7 +68,10 @@ export const QueryInput = ({ onSubmit, isLoading }: QueryInputProps) => {
     }
   };
 
-  const isInvalid = partnerId.trim() && !isValidUUID(partnerId);
+  const isInvalid = input.trim() && isPartnerId(input) && !isValidUUID(input);
+  const placeholder = currentPartnerId 
+    ? "Ask a question about this customer or assess another partner..." 
+    : "Ask anything: 'Assess risk for partner [ID]' or 'What is the name of client [ID]?'...";
 
   return (
     <form onSubmit={handleSubmit} className="space-y-2">
@@ -58,13 +79,13 @@ export const QueryInput = ({ onSubmit, isLoading }: QueryInputProps) => {
         <div className="flex-1">
           <Input
             type="text"
-            value={partnerId}
+            value={input}
             onChange={(e) => {
-              setPartnerId(e.target.value);
+              setInput(e.target.value);
               setShowValidation(false);
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Enter Partner ID (UUID format)"
+            placeholder={placeholder}
             className={`bg-card border-border focus:ring-primary ${
               isInvalid ? "border-destructive" : ""
             }`}
@@ -78,10 +99,15 @@ export const QueryInput = ({ onSubmit, isLoading }: QueryInputProps) => {
               </AlertDescription>
             </Alert>
           )}
+          {currentPartnerId && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Currently analyzing: {currentPartnerId.substring(0, 8)}...
+            </p>
+          )}
         </div>
         <Button
           type="submit"
-          disabled={!partnerId.trim() || isLoading}
+          disabled={!input.trim() || isLoading}
           className="bg-primary hover:bg-primary/90 text-primary-foreground"
         >
           <Send className="h-4 w-4" />

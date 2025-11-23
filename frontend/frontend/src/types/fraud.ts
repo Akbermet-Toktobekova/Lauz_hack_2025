@@ -37,9 +37,32 @@ export interface FraudAnalysisResponse {
   partner_id: string;
   risk_score: number; // 0-100 scale
   rationale: string;
-  raw_response: string;
-  profile_text: string;
+  raw_response?: string;
+  profile_text?: string;
   timestamp: string;
+  ucp?: {
+    recent_transactions?: Array<{
+      Date?: string;
+      Amount?: number;
+      Currency?: string;
+      [key: string]: any;
+    }>;
+    all_transactions?: Array<{
+      Date?: string;
+      Amount?: number;
+      Currency?: string;
+      [key: string]: any;
+    }>;
+    financial_aggregates?: {
+      [key: string]: any;
+    };
+    [key: string]: any;
+  };
+  feature_contributions?: {
+    [key: string]: any;
+  };
+  model_version?: string;
+  [key: string]: any; // Allow additional fields from enhanced fraud agent
 }
 
 export interface QueryMessage {
@@ -49,6 +72,20 @@ export interface QueryMessage {
   timestamp: Date;
   data?: FraudAnalysisResponse;
   partnerId?: string;
+  isQuestion?: boolean; // true if it's a Q&A query, false if it's a risk assessment
+}
+
+export interface QAResponse {
+  partner_id: string;
+  question: string;
+  answer: string;
+  citations: Array<{
+    type: string;
+    data: Record<string, any>;
+  }>;
+  ucp_snapshot: Record<string, any>;
+  source: string;
+  status: "success";
 }
 
 export type RiskLevel = "high" | "medium" | "low";

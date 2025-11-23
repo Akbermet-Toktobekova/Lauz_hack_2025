@@ -15,9 +15,9 @@ export const QueryHistory = ({ messages }: QueryHistoryProps) => {
       <div className="flex items-center justify-center h-full text-muted-foreground">
         <div className="text-center">
           <Bot className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p className="text-lg font-medium">Start a fraud analysis query</p>
+          <p className="text-lg font-medium">Start a fraud analysis</p>
           <p className="text-sm mt-2">
-            Ask about client risk profiles and transaction patterns
+            Enter a Partner ID to assess risk, then ask questions about the customer
           </p>
         </div>
       </div>
@@ -50,9 +50,14 @@ export const QueryHistory = ({ messages }: QueryHistoryProps) => {
             )}
           >
             <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-            {message.data && (
+            {message.data && !message.isQuestion && (
               <div className="mt-2 text-xs opacity-70">
                 <p>Risk Score: {message.data.risk_score}/100</p>
+              </div>
+            )}
+            {message.isQuestion && message.type === "assistant" && (
+              <div className="mt-2 text-xs opacity-70 italic">
+                Based on customer profile data
               </div>
             )}
             <p className="text-xs opacity-70 mt-2">
