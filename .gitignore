@@ -13,9 +13,63 @@ venv/
 ENV/
 .venv
 
+# Python package files
+*.egg-info/
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+
 # Common ignores
 .DS_Store
 *.log
 .cache/
 *.cache
-gpt-oss-20b/
+
+# Model files (specific)
+gpt-oss-20b/gpt-oss-20b-mxfp4.gguf
+
+# Environment variables (IMPORTANT - contains secrets!)
+.env
+.env.local
+.env.*.local
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# Node.js (if frontend uses npm)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Build/Distribution files
+dist/
+build/
+*.egg-info/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Large dependency/library folders (if you don't need to version them)
+# gpt-oss-20b/  # Uncomment if you don't want to track this entire folder
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# OS specific
+Thumbs.db
+.DS_Store
